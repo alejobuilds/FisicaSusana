@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Simulador: Lanzamiento por Rotor y Colisión 1D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Optimizaciones estrictas para móviles y prevención de desbordamiento */
+        body { background-color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+        
+        /* Regla estricta para íconos SVG: Evita que se vuelvan gigantes en cualquier entorno */
+        svg { width: 1.25rem !important; height: 1.25rem !important; max-width: 20px !important; max-height: 20px !important; flex-shrink: 0; }
+        
+        /* Forzar tamaño de fuente a 16px en inputs para evitar el auto-zoom de iOS Safari */
+        input[type="number"], select, button { font-size: 16px !important; }
+        
+        /* Contenedor del canvas responsivo */
+        #canvas-container { position: relative; width: 100%; aspect-ratio: 16/9; background: #0f172a; border-radius: 0.5rem; overflow: hidden; box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.3); }
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+        
+        /* Ocultar scrollbars en áreas de scroll interno si las hay */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body class="text-slate-800 p-3 md:p-6 lg:p-8 flex justify-center min-h-screen items-start">
+
+<div class="w-full max-w-6xl bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+    <!-- Header -->
+    <header class="bg-indigo-700 text-white p-4 md:p-6 text-center">
+        <h1 class="text-xl md:text-2xl font-bold flex items-center justify-center gap-2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path><path d="M12 12L22 12"></path></svg>
+            Lanzamiento por Rotor y Colisión 1D
+        </h1>
+        <p class="text-indigo-200 text-sm mt-1">Cinemática circular, momento lineal e impulso</p>
+    </header>
+
+    <div class="flex flex-col lg:flex-row p-4 md:p-6 gap-6">
+        
+        <!-- Panel de Controles (Columna Izquierda en PC, Arriba en Móvil) -->
+        <div class="w-full lg:w-80 flex-shrink-0 bg-slate-50 p-5 rounded-xl border border-slate-200 space-y-4">
+            <h2 class="font-semibold text-slate-700 flex items-center gap-2 border-b border-slate-200 pb-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"></path><path d="M18 20V4"></path><path d="M6 20v-4"></path></svg>
+                Parámetros del Sistema
+            </h2>
+            
+            <div class="grid grid-cols-2 gap-3 lg:grid-cols-1">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Masa Proyectil (m₁ - kg):</label>
+                    <input type="number" id="m1" value="2.0" step="0.5" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Masa Blanco (m₂ - kg):</label>
+                    <input type="number" id="m2" value="5.0" step="0.5" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Velocidad Angular (ω - rad/s):</label>
+                    <input type="number" id="omega" value="10.0" step="1" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Radio Rotor (R - m):</label>
+                    <input type="number" id="radius" value="1.5" step="0.1" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all">
+                </div>
+            </div>
+
+            <div class="pt-2">
+                <label class="block text-xs font-bold text-slate-500 mb-1">Coef. Restitución (e):</label>
+                <select id="eVal" class="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all appearance-none cursor-pointer">
+                    <option value="1.0">e = 1.0 (Elástico)</option>
+                    <option value="0.5">e = 0.5 (Parcial)</option>
+                    <option value="0.0">e = 0.0 (Inelástico)</option>
+                </select>
+            </div>
+
+            <div class="flex gap-2 mt-2">
+                <button onclick="setE(1.0)" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 rounded-lg text-sm transition-colors cursor-pointer">Set e=1</button>
+                <button onclick="setE(0.0)" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium py-2 rounded-lg text-sm transition-colors cursor-pointer">Set e=0</button>
+            </div>
+
+            <button onclick="iniciarSimulacion()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-4 shadow-md transition-transform active:scale-95 flex justify-center items-center gap-2 cursor-pointer">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                SIMULAR IMPACTO
+            </button>
+        </div>
+
+        <!-- Área Principal (Simulación y Resultados) -->
+        <div class="flex-1 flex flex-col gap-4 min-w-0">
+            <!-- Canvas -->
+            <div id="canvas-container">
+                <canvas id="simCanvas"></canvas>
+            </div>
+
+            <!-- Resultados en Tiempo Real -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-blue-50 border border-blue-100 p-3 rounded-xl text-center">
+                    <div class="text-[10px] uppercase font-bold text-blue-500 mb-1">v₁ (Salida)</div>
+                    <div class="font-mono font-bold text-lg text-blue-900" id="res-v1in">0.0 m/s</div>
+                </div>
+                <div class="bg-green-50 border border-green-100 p-3 rounded-xl text-center">
+                    <div class="text-[10px] uppercase font-bold text-green-500 mb-1">v₁' (Post-choque)</div>
+                    <div class="font-mono font-bold text-lg text-green-900" id="res-v1fin">0.0 m/s</div>
+                </div>
+                <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-xl text-center">
+                    <div class="text-[10px] uppercase font-bold text-indigo-500 mb-1">v₂' (Post-choque)</div>
+                    <div class="font-mono font-bold text-lg text-indigo-900" id="res-v2fin">0.0 m/s</div>
+                </div>
+                <div class="bg-amber-50 border border-amber-100 p-3 rounded-xl text-center">
+                    <div class="text-[10px] uppercase font-bold text-amber-500 mb-1">Impulso (J)</div>
+                    <div class="font-mono font-bold text-lg text-amber-900" id="res-j">0.0 N·s</div>
+                </div>
+            </div>
+
+            <!-- Resumen Teórico / Ecuaciones (Acordeón para ahorrar espacio) -->
+            <details class="group bg-slate-50 border border-slate-200 rounded-xl overflow-hidden mt-2">
+                <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 text-slate-700 hover:bg-slate-100 transition-colors">
+                    <span class="flex items-center gap-2">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                        Ver Fórmulas y Telemetría Completa
+                    </span>
+                    <span class="transition group-open:rotate-180">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </span>
+                </summary>
+                <div class="p-4 border-t border-slate-200 text-sm text-slate-600 bg-white space-y-3">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-slate-50 p-3 rounded border border-slate-100">
+                            <strong class="text-slate-800 block mb-1">Cant. Movimiento (p)</strong>
+                            p_inicial = <span id="tele-pin" class="font-mono text-indigo-600">0.0</span> kg·m/s<br>
+                            p_final = <span id="tele-pfin" class="font-mono text-indigo-600">0.0</span> kg·m/s<br>
+                            <em class="text-xs text-slate-400">Fórmula: p = m·v (Se conserva)</em>
+                        </div>
+                        <div class="bg-slate-50 p-3 rounded border border-slate-100">
+                            <strong class="text-slate-800 block mb-1">Energía Cinética (K)</strong>
+                            K_inicial = <span id="tele-kin" class="font-mono text-pink-600">0.0</span> J<br>
+                            ΔK (Pérdida) = <span id="tele-dk" class="font-mono text-pink-600">0.0</span> J<br>
+                            <em class="text-xs text-slate-400">Fórmula: K = ½·m·v²</em>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-2">
+                        <strong>Velocidades tras impacto 1D:</strong><br>
+                        v₁' = [(m₁ - e·m₂)·v₁] / (m₁ + m₂)<br>
+                        v₂' = [m₁·(1 + e)·v₁] / (m₁ + m₂)
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- LÓGICA DE FÍSICA Y ANIMACIÓN (Totalmente robusta y responsive) ---
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false }); // Optimización de renderizado
+    const container = document.getElementById('canvas-container');
+
+    // Variables de estado
+    let rafId = null;
+    let phys = null; // Guardará el estado físico actual
+    let animationState = 'idle'; // idle | rotating | flying | collided
+    let timer = 0;
+    
+    // Partículas para efecto de choque
+    let particles = [];
+
+    // Ajuste DPI responsivo
+    function resizeCanvas() {
+        const rect = container.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+        if(animationState === 'idle') drawFrame(0); // Redibujar si está estático
+    }
+    
+    // Observador para redimensionamiento fluido (mobile a desktop)
+    const resizeObserver = new ResizeObserver(() => { resizeCanvas(); });
+    resizeObserver.observe(container);
+    
+    // Inicializar tamaño
+    resizeCanvas();
+
+    function setE(val) {
+        document.getElementById('eVal').value = val.toFixed(1);
+    }
+
+    function iniciarSimulacion() {
+        if(rafId) cancelAnimationFrame(rafId);
+        particles = [];
+        
+        // Capturar y validar variables
+        const m1 = Math.max(0.1, parseFloat(document.getElementById('m1').value) || 1);
+        const m2 = Math.max(0.1, parseFloat(document.getElementById('m2').value) || 1);
+        const w = parseFloat(document.getElementById('omega').value) || 1;
+        const R = parseFloat(document.getElementById('radius').value) || 1;
+        const e = parseFloat(document.getElementById('eVal').value) || 0;
+
+        // Cálculos Físicos Exactos
+        const v1_in = w * R;
+        const v1_fin = ((m1 - e*m2) * v1_in) / (m1 + m2);
+        const v2_fin = (m1 * (1 + e) * v1_in) / (m1 + m2);
+        
+        const p_in = m1 * v1_in;
+        const p_fin = m1*v1_fin + m2*v2_fin;
+        const J = m2 * v2_fin;
+        
+        const K_in = 0.5 * m1 * Math.pow(v1_in, 2);
+        const K_fin = 0.5 * m1 * Math.pow(v1_fin, 2) + 0.5 * m2 * Math.pow(v2_fin, 2);
+        const dK = K_fin - K_in;
+
+        // Actualizar UI de telemetría
+        document.getElementById('res-v1in').innerText = v1_in.toFixed(2) + " m/s";
+        document.getElementById('res-v1fin').innerText = v1_fin.toFixed(2) + " m/s";
+        document.getElementById('res-v2fin').innerText = v2_fin.toFixed(2) + " m/s";
+        document.getElementById('res-j').innerText = J.toFixed(2) + " N·s";
+        
+        document.getElementById('tele-pin').innerText = p_in.toFixed(2);
+        document.getElementById('tele-pfin').innerText = p_fin.toFixed(2);
+        document.getElementById('tele-kin').innerText = K_in.toFixed(2);
+        document.getElementById('tele-dk').innerText = dK.toFixed(2);
+
+        // Configurar estado para animación
+        phys = { 
+            m1, m2, w, R, e, v1_in, v1_fin, v2_fin, 
+            cx: 0, cy: 0, scale: 1, 
+            p1: {x:0, y:0}, p2: {x:0, y:0},
+            angle: Math.PI / 2
+        };
+
+        animationState = 'rotating';
+        timer = 0;
+        loop();
+    }
+
+    function createSparks(x, y) {
+        for(let i=0; i<15; i++) {
+            particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 8,
+                vy: (Math.random() - 0.5) * 8,
+                life: 1.0,
+                color: Math.random() > 0.5 ? '#f59e0b' : '#ef4444'
+            });
+        }
+    }
+
+    function drawFrame(deltaTime) {
+        const rect = container.getBoundingClientRect();
+        const W = rect.width;
+        const H = rect.height;
+
+        // Fondo y rejilla
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, W, H);
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 1;
+        for(let i=0; i<W; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,H); ctx.stroke(); }
+        for(let i=0; i<H; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(W,i); ctx.stroke(); }
+
+        // Suelo
+        const groundY = H * 0.8;
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke();
+
+        if(!phys) return; // Si no hay datos, no dibujar entidades
+
+        // Escalamiento visual adaptativo basado en el ancho del canvas
+        const visualR = (phys.R / 5) * (W * 0.15); // Escala del rotor
+        phys.cx = W * 0.2; // Centro del rotor X
+        phys.cy = groundY - visualR - 15; // Centro del rotor Y (flotando un poco)
+
+        // Configuración de tamaños de masa (logarítmico para no salirse de pantalla)
+        const s1 = 15 + Math.log10(phys.m1 + 1) * 8;
+        const s2 = 20 + Math.log10(phys.m2 + 1) * 12;
+
+        // Lógica de estados y posiciones
+        let p1x = phys.cx;
+        let p1y = phys.cy;
+        let p2x = W * 0.65;
+        let p2y = groundY - s2;
+
+        if (animationState === 'rotating') {
+            phys.angle -= (phys.w * 0.05); // Girar
+            p1x = phys.cx + Math.cos(phys.angle) * visualR;
+            p1y = phys.cy + Math.sin(phys.angle) * visualR;
+            
+            // Si llega al punto superior (tangente horizontal) -> soltar
+            if (phys.angle <= -Math.PI / 2) {
+                phys.angle = -Math.PI / 2;
+                p1x = phys.cx;
+                p1y = phys.cy - visualR;
+                animationState = 'flying';
+                phys.p1 = {x: p1x, y: p1y};
+            }
+        } else if (animationState === 'flying') {
+            phys.p1.x += (phys.v1_in * 0.5); // Escala visual de velocidad
+            p1x = phys.p1.x;
+            p1y = phys.cy - visualR;
+
+            // Detección de colisión (asumiendo que m2 está a la misma altura o cae)
+            // Para simplificar visualmente, la tangente superior choca con el bloque.
+            p2y = p1y + s1 - s2; // Alinear alturas para impacto 1D visual
+            
+            if (p1x + s1 >= p2x - s2) {
+                p1x = p2x - s2 - s1; // Ajustar posición exacta de impacto
+                phys.p1.x = p1x;
+                phys.p2 = {x: p2x, y: p2y};
+                createSparks(p1x + s1, p1y);
+                animationState = 'collided';
+            }
+        } else if (animationState === 'collided') {
+            phys.p1.x += (phys.v1_fin * 0.5);
+            phys.p2.x += (phys.v2_fin * 0.5);
+            p1x = phys.p1.x;
+            p1y = phys.cy - visualR;
+            p2x = phys.p2.x;
+            p2y = p1y + s1 - s2;
+        }
+
+        // --- RENDERIZADO VISUAL ---
+
+        // 1. Dibujar Rotor (solo si está rotando o volando cerca)
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.arc(phys.cx, phys.cy, visualR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Eje central rotor
+        ctx.fillStyle = '#94a3b8';
+        ctx.beginPath(); ctx.arc(phys.cx, phys.cy, 4, 0, Math.PI*2); ctx.fill();
+        
+        // Radio vector (si rota)
+        if (animationState === 'rotating') {
+            ctx.strokeStyle = '#64748b';
+            ctx.beginPath(); ctx.moveTo(phys.cx, phys.cy); ctx.lineTo(p1x, p1y); ctx.stroke();
+        }
+
+        // 2. Dibujar Blanco m2 (siempre visible)
+        ctx.fillStyle = '#3b82f6'; // Azul
+        if(animationState !== 'collided' && animationState !== 'flying') p2y = phys.cy - visualR + s1 - s2; // Alinear desde el principio
+        ctx.fillRect(p2x - s2, p2y - s2, s2*2, s2*2);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('m₂', p2x, p2y);
+
+        // 3. Dibujar Proyectil m1
+        ctx.fillStyle = '#ef4444'; // Rojo
+        ctx.beginPath(); ctx.arc(p1x, p1y, s1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'white';
+        ctx.fillText('m₁', p1x, p1y);
+
+        // 4. Efectos (Partículas)
+        for(let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx; p.y += p.vy;
+            p.life -= 0.05;
+            if(p.life <= 0) { particles.splice(i,1); continue; }
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha = 1.0;
+        }
+
+        // 5. Vectores de Velocidad (Flechas indicadoras)
+        function drawArrow(x, y, vx, color, label) {
+            if(Math.abs(vx) < 0.1) return;
+            const len = Math.max(20, Math.min(vx * 4, 80)) * Math.sign(vx); // Limitar largo visual
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(x, Math.max(10, y - s1 - 15)); ctx.lineTo(x + len, Math.max(10, y - s1 - 15)); ctx.stroke();
+            // Punta de flecha
+            ctx.beginPath();
+            if(vx > 0) {
+                ctx.moveTo(x + len, Math.max(10, y - s1 - 15));
+                ctx.lineTo(x + len - 6, Math.max(10, y - s1 - 20));
+                ctx.lineTo(x + len - 6, Math.max(10, y - s1 - 10));
+            } else {
+                ctx.moveTo(x + len, Math.max(10, y - s1 - 15));
+                ctx.lineTo(x + len + 6, Math.max(10, y - s1 - 20));
+                ctx.lineTo(x + len + 6, Math.max(10, y - s1 - 10));
+            }
+            ctx.fill();
+            // Texto
+            ctx.font = '10px sans-serif';
+            ctx.fillText(label, x + len/2, Math.max(0, y - s1 - 25));
+        }
+
+        if(animationState === 'flying') {
+            drawArrow(p1x, p1y, phys.v1_in, '#fca5a5', 'v₁');
+        } else if (animationState === 'collided') {
+            drawArrow(p1x, p1y, phys.v1_fin, '#fca5a5', "v₁'");
+            drawArrow(p2x, p2y, phys.v2_fin, '#93c5fd', "v₂'");
+        }
+    }
+
+    let lastTime = 0;
+    function loop(timestamp) {
+        if(!lastTime) lastTime = timestamp;
+        const dt = timestamp - lastTime;
+        lastTime = timestamp;
+        
+        drawFrame(dt);
+        rafId = requestAnimationFrame(loop);
+    }
+    
+    // Dibujo inicial estático
+    setTimeout(() => { drawFrame(0); }, 100);
+
+</script>
+</body>
+</html>
